@@ -1,16 +1,18 @@
 <template>
     <div v-if="showRoom" class="home">
-        <room-video v-for="(stream, index) in streams || []" :key="index" :user="stream"></room-video>
+        <room-video v-for="(user, index) in streams" :key="index" :user="user"></room-video>
     </div>
 </template>
 
 <script lang="ts">
 import { Component, Vue, Prop, Watch } from "vue-property-decorator";
+import { uuid } from "vue-uuid";
 import { Socket } from "vue-socket.io-extended";
 import { namespace } from "vuex-class";
-import RTCPeer from "@/api/rtc_peer";
-import { ADD_USER_ACTION, ADD_STREAM_ACTION } from "@/store/actions";
+import { ADD_USER_ACTION, ADD_STREAM_ACTION, REMOVE_USER_ACTION } from "@/store/actions";
 import RoomVideo from "@/components/video.vue";
+import { RoomStream } from "@/store/state";
+import { GET_STREAMS, HAS_USER } from "@/store/getters";
 
 const roomNs = namespace("room");
 
@@ -28,58 +30,220 @@ export default class Room extends Vue {
 
     @roomNs.Action(ADD_USER_ACTION) addUser: any;
     @roomNs.Action(ADD_STREAM_ACTION) addStream: any;
-    @roomNs.State((state) => state.ShowStreams) streams: any;
-    private peer: RTCPeer;
+    @roomNs.Action(REMOVE_USER_ACTION) removeUser: any;
+    @roomNs.State((state) => state.Users) streams: any;
+    @roomNs.Getter(HAS_USER) hasUser: any;
+    @roomNs.Getter(GET_STREAMS) getStreams: any;
+
+    private id: string;
+    private localStream: MediaStream;
+    private pearConnections: { [key: string]: RTCPeerConnection } = {};
+    private TURN_SERVER_URL = process.env.VUE_APP_TURN_SERVER_URL;
+    private TURN_SERVER_USERNAME = process.env.VUE_APP_TURN_SERVER_USERNAME;
+    private TURN_SERVER_CREDENTIAL = process.env.VUE_APP_TURN_SERVER_CREDENTIAL;
+    // WebRTC config: you don't have to change this for the example to work
+    // If you are testing on localhost, you can just use PC_CONFIG = {}
+    private PC_CONFIG = {
+        iceServers: [
+            {
+                urls: `turn:${this.TURN_SERVER_URL}?transport=tcp`,
+                username: this.TURN_SERVER_USERNAME,
+                credential: this.TURN_SERVER_CREDENTIAL,
+            },
+            {
+                urls: `turn:${this.TURN_SERVER_URL}?transport=udp`,
+                username: this.TURN_SERVER_USERNAME,
+                credential: this.TURN_SERVER_CREDENTIAL,
+            },
+        ],
+    };
 
     @Socket("ready")
     async onReady() {
         // eslint-disable-next-line no-console
-        console.debug("socket ready");
-        await this.peer.sendOffer();
+        console.debug("socket ready, register ", this.id);
+        this.emitRegister("all");
     }
 
-    @Socket("data")
-    async onData(payload: any) {
+    @Socket("register")
+    async onRegister(payload: any) {
         // eslint-disable-next-line no-console
-        // console.debug("socket receive", payload);
-        const user = await this.peer.handleSignalingData(payload);
-        if (user !== undefined) {
-            await this.addUser(user);
+        // console.debug("receive", payload, payload["to"] === "all");
+        const uuid = payload["uuid"];
+        if ((payload["to"] === this.id || payload["to"] === "all") && !this.hasUser(uuid)) {
+            this.emitRegister(uuid);
+            delete payload["to"];
+            payload["events"] = [];
+            await this.addUser(payload);
+        }
+        if (payload["to"] === this.id && this.hasUser(uuid)) {
+            await this.registerPeerConnection(uuid);
+            await this.sendOffer(uuid);
+        }
+    }
+
+    @Socket("webrtc")
+    async onWebrtc(payload: any) {
+        // eslint-disable-next-line no-console
+        // console.debug("received ", payload);
+        if (payload["to"] == this.id) {
+            await this.handleSignalingData(payload);
         }
     }
 
     @Watch("showRoom")
     private async onShowRoom() {
+        this.id = uuid.v4();
+        // eslint-disable-next-line no-console
+        console.debug("my id ", this.id);
         await this.getLocalStream();
     }
 
     private async getLocalStream() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: this.showAudio, video: this.showVideo });
+            this.localStream = await navigator.mediaDevices.getUserMedia({
+                audio: this.showAudio,
+                video: this.showVideo,
+            });
+            await this.$socket.client.connect();
             // eslint-disable-next-line no-console
             console.debug("Stream found");
-            this.peer = new RTCPeer(stream, this.emit);
-            this.peer.createPeerConnection();
-            this.peer.setOnAddStream(this.onAddStream);
-            this.$socket.client.connect();
         } catch (error) {
             // eslint-disable-next-line no-console
             console.error("Stream not found: ", error);
         }
     }
 
-    private async onAddStream(event: RTCTrackEvent) {
-        const cnameRgx = /a=ssrc:\d+\scname:\{([\w\d-]+)\}/gi;
-        // @ts-ignore
-        const lines = event.originalTarget.remoteDescription["sdp"].split("\r\n");
-        lines.find((line: string) => cnameRgx.test(line));
-        if (RegExp.$1 !== null) {
-            await this.addStream({ cname: RegExp.$1, stream: event });
+    private async onAddStream(event: RTCTrackEvent, uuid: string) {
+        // eslint-disable-next-line no-console
+        console.debug("Receive stream ", event, uuid);
+        const payload: RoomStream = {
+            uuid: uuid,
+            event: event,
+        };
+        await this.addStream(payload);
+    }
+
+    private async sendAnswer(uuid: string) {
+        // eslint-disable-next-line no-console
+        console.debug("Send answer", uuid);
+        try {
+            const connection = this.pearConnections[uuid];
+            const answer = await connection.createAnswer();
+            await connection.setLocalDescription(answer);
+            this.emitWebrtc(answer, uuid);
+        } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error("sendAnswer failed: ", error);
         }
     }
 
-    public emit(payload: any) {
-        this.$socket.client.emit("data", { userName: this.userName, ...payload });
+    private registerPeerConnection(uuid: string) {
+        try {
+            const pearConnection: RTCPeerConnection = new RTCPeerConnection(this.PC_CONFIG);
+            pearConnection.onicecandidate = (evt) => this.onIceCandidate(evt, uuid);
+            this.localStream.getTracks().forEach((track) => pearConnection.addTrack(track, this.localStream));
+            pearConnection.ontrack = (evt) => this.onAddStream(evt, uuid);
+            pearConnection.oniceconnectionstatechange = (evt) => this.checkPeerDisconnect(evt, uuid);
+            // eslint-disable-next-line no-console
+            console.log("register peer connection", uuid, pearConnection);
+            this.pearConnections[uuid] = pearConnection;
+            return pearConnection;
+        } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error("PeerConnection failed: ", error);
+        }
+    }
+
+    private onIceCandidate(evt: any, uuid: string) {
+        if (evt.candidate) {
+            // eslint-disable-next-line no-console
+            console.debug("ICE candidate");
+            const payload = { type: "candidate", candidate: evt.candidate };
+            this.emitWebrtc(payload, uuid);
+        }
+    }
+
+    private async sendOffer(uuid: string) {
+        try {
+            const connection = this.pearConnections[uuid];
+            const offer = await connection.createOffer();
+            await connection.setLocalDescription(offer);
+            this.emitWebrtc(offer, uuid);
+            // eslint-disable-next-line no-console
+            console.debug("Create offer ", uuid, offer);
+        } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error("sendOffer failed: ", error);
+        }
+    }
+
+    private async handleSignalingData(payload: any) {
+        const webrtc: any = payload["webrtc"];
+        const uuid = payload["uuid"];
+        if (webrtc.type === "offer") {
+            try {
+                // eslint-disable-next-line no-console
+                console.debug("Receive offer, setRemoteDescription and send answer. uuid: ", uuid);
+                let connection = this.pearConnections[uuid];
+                if (connection === undefined) {
+                    connection = this.registerPeerConnection(uuid);
+                }
+                await connection.setRemoteDescription(new RTCSessionDescription(webrtc));
+                await this.sendAnswer(uuid);
+            } catch (error) {
+                // eslint-disable-next-line no-console
+                console.error("setRemoteDescription with type 'offer' failed : ", error);
+            }
+        }
+        if (webrtc.type === "answer") {
+            try {
+                // eslint-disable-next-line no-console
+                console.debug("Receive answer, setRemoteDescription. uuid: ", uuid);
+                const connection = this.pearConnections[uuid];
+                await connection.setRemoteDescription(new RTCSessionDescription(webrtc));
+            } catch (error) {
+                // eslint-disable-next-line no-console
+                console.error("setRemoteDescription with type 'answer' failed : ", error);
+            }
+        }
+        if (webrtc.type === "candidate") {
+            try {
+                const connection = this.pearConnections[uuid];
+                // eslint-disable-next-line no-console
+                console.debug("Receive candidate, addIceCandidate");
+                await connection.addIceCandidate(new RTCIceCandidate(webrtc.candidate));
+            } catch (error) {
+                // eslint-disable-next-line no-console
+                console.error("addIceCandidate with type 'candidate' failed : ", error);
+            }
+        }
+    }
+
+    private emitWebrtc(payload: any, to: string) {
+        this.$socket.client.emit("webrtc", { to: to, uuid: this.id, webrtc: payload });
+    }
+
+    private emitRegister(to: string = undefined) {
+        if (this.hasUser(to)) {
+            return;
+        }
+        let payload: any = { uuid: this.id, userName: this.userName };
+        if (to !== undefined) {
+            // eslint-disable-next-line no-console
+            console.debug("Send register to", to);
+            payload["to"] = to;
+        }
+        this.$socket.client.emit("register", payload);
+    }
+    private async checkPeerDisconnect(event: any, uuid: string) {
+        const peerCon = this.pearConnections[uuid].iceConnectionState;
+        // eslint-disable-next-line no-console
+        console.log(`connection with peer ${uuid} ${peerCon}`);
+        if (peerCon === "failed" || peerCon === "closed" || peerCon === "disconnected") {
+            delete this.pearConnections[uuid];
+            await this.removeUser(uuid);
+        }
     }
 }
 </script>

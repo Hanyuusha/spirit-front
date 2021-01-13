@@ -1,21 +1,25 @@
 <template>
     <div class="video">
         <video ref="stream" autoplay playsinline width="200px" height="200px"></video>
-        <div>{{ user.userName }}</div>
+        <p>{{ user.userName }}</p>
     </div>
 </template>
 
 <script lang="ts">
-import { Component, Prop, Vue } from "vue-property-decorator";
-import { RoomUser } from "@/store/state";
+import { Component, Prop, Vue, Watch } from "vue-property-decorator";
 
 @Component
 export default class RoomVideo extends Vue {
-    @Prop() user: RoomUser;
+    @Prop() user: any;
 
-    private mounted() {
-        // @ts-ignore
-        this.$refs.stream.srcObject = this.user.events[0].streams[0];
+    @Watch("user", { immediate: true, deep: true })
+    private onUserChanged() {
+        // eslint-disable-next-line no-console
+        console.log("User", this.user);
+        if (this.user.events[0] !== undefined) {
+            // @ts-ignore
+            this.$refs.stream.srcObject = this.user.events[0].streams[0];
+        }
     }
 }
 </script>

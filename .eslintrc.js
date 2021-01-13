@@ -57,7 +57,6 @@ module.exports = {
           "check-type",
           "check-type-operator",
       ],
-      "smells/no-switch": "error",
       "smells/no-complex-switch-case": "error",
       "smells/no-setinterval": "error",
       "smells/no-this-assign": "error",

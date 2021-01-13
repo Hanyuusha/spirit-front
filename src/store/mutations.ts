@@ -1,32 +1,26 @@
 import { MutationTree } from "vuex";
-import { ITypeStateRoom, RoomUser } from "./state";
+import { ITypeStateRoom, RoomUser, RoomStream } from "./state";
 export const ADD_USER_MUTATION = "ADD_USER_MUTATION";
+export const REMOVE_USER_MUTATION = "REMOVE_USER_MUTATION";
 export const ADD_STREAM_MUTATION = "ADD_STREAM_MUTATION";
-export const UPDATE_UI_MUTATION = "UPDATE_UI_MUTATION";
+
 export const mutations: MutationTree<ITypeStateRoom> = {
     [ADD_USER_MUTATION]: (state: ITypeStateRoom, user: RoomUser) => {
-        if (state.Streams === null) {
-            state.Streams = {};
-        }
-
-        state.Streams[user.cname].userName = user.userName;
-        state.Streams[user.cname].peerId = user.peerId;
-    },
-    [ADD_STREAM_MUTATION]: (state: ITypeStateRoom, payload: any) => {
-        if (state.Streams == null) {
-            state.Streams = {};
-        }
-        const cname = payload["cname"];
-        if (state.Streams[cname] == null) {
-            state.Streams[cname] = { userName: "", peerId: "", cname: cname, events: [] };
-        }
-        state.Streams[cname].events.push(payload["stream"]);
-    },
-    [UPDATE_UI_MUTATION]: (state: ITypeStateRoom) => {
+        state.Users.push(user);
         // eslint-disable-next-line no-console
-        console.log("UPDATE_UI_MUTATION");
-        state.ShowStreams = Object.values(state.Streams).filter(
-            (user: RoomUser) => user.events.length > 1 && user.userName !== "",
-        );
+        console.log("ADD_USER_MUTATION", user);
+    },
+    [ADD_STREAM_MUTATION]: (state: ITypeStateRoom, payload: RoomStream) => {
+        const user = state.Users.find((user: RoomUser) => user.uuid === payload.uuid);
+        user.events.push(payload.event);
+        // eslint-disable-next-line no-console
+        console.log("ADD_STREAM_MUTATION", payload);
+    },
+    [REMOVE_USER_MUTATION]: (state: ITypeStateRoom, uuid: string) => {
+        const user = state.Users.find((user: RoomUser) => user.uuid === uuid);
+        const index = state.Users.indexOf(user);
+        state.Users.splice(index, 1);
+        // eslint-disable-next-line no-console
+        console.log("REMOVE_USER_MUTATION", uuid);
     },
 };

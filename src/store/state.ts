@@ -1,16 +1,18 @@
 export interface ITypeStateRoom {
-    Streams: { [key: string]: RoomUser };
-    ShowStreams: RoomUser[];
+    Users: RoomUser[];
 }
 
 export type RoomUser = {
-    peerId: string;
-    cname: string;
+    uuid: string;
     userName: string;
     events?: RTCTrackEvent[];
 };
 
+export type RoomStream = {
+    uuid: string;
+    event: RTCTrackEvent;
+};
+
 export const state: ITypeStateRoom = {
-    Streams: null,
-    ShowStreams: null,
+    Users: [],
 };
