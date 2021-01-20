@@ -1,7 +1,13 @@
 <template>
-    <div v-if="showRoom" class="home">
-        <room-video v-for="(user, index) in streams" :key="index" :user="user" :is-self="user.uuid === id"></room-video>
-    </div>
+    <v-container v-if="showRoom" class="grey lighten-5">
+        <v-row no-gutters>
+            <v-col v-for="(user, index) in streams" :key="index" cols="12" sm="4">
+                <v-card class="pa-2" outlined tile>
+                    <room-video :user="user" :is-self="user.uuid === id"></room-video>
+                </v-card>
+            </v-col>
+        </v-row>
+    </v-container>
 </template>
 
 <script lang="ts">
@@ -87,7 +93,7 @@ export default class Room extends Vue {
             });
             await this.addUser({ uuid: this.id, userName: this.userName, events: [] });
             await this.addStream({ uuid: this.id, event: this.localStream });
-            await this.$socket.client.connect();
+            this.$socket.client.connect();
             // eslint-disable-next-line no-console
             console.debug("Stream found");
         } catch (error) {

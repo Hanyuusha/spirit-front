@@ -5,12 +5,12 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint",
-    "lint-no-fix": "vue-cli-service lint --no-fix",
-    "test:e2e": "vue-cli-service test:e2e",
     "test:unit": "vue-cli-service test:unit",
-    "storybook": "start-storybook -s ./public -p 9002 -c .storybook",
-    "build-storybook": "build-storybook -s ./public -c .storybook -o ./storybook-dist --quiet"
+    "test:e2e": "vue-cli-service test:e2e",
+    "lint": "vue-cli-service lint",
+    "build-storybook": "build-storybook -s ./public -c .storybook -o ./storybook-dist --quiet",
+    "lint-no-fix": "vue-cli-service lint --no-fix",
+    "storybook": "start-storybook -s ./public -p 9002 -c .storybook"
   },
   "dependencies": {
     "core-js": "^2.6.5",
@@ -21,6 +21,7 @@
     "vue-router": "^3.0.3",
     "vue-socket.io-extended": "^4.0.5",
     "vue-uuid": "^2.0.2",
+    "vuetify": "^2.2.11",
     "vuex": "^3.0.1",
     "vuex-class": "^0.3.2"
   },
@@ -53,9 +54,13 @@
     "eslint-plugin-vue": "^5.0.0",
     "lint-staged": "^8.1.5",
     "prettier": "^1.18.2",
+    "sass": "^1.19.0",
+    "sass-loader": "^7.1.0",
     "ts-jest": "^23.0.0",
     "typescript": "^3.4.3",
-    "vue-template-compiler": "^2.6.10"
+    "vue-cli-plugin-vuetify": "~2.0.9",
+    "vue-template-compiler": "^2.6.10",
+    "vuetify-loader": "^1.3.0"
   },
   "gitHooks": {
     "pre-commit": "lint-staged"

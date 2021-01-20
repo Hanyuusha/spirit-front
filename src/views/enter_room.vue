@@ -1,20 +1,30 @@
 <template>
     <div id="enter-room">
-        <div v-if="!showRoom">
-            <div>
-                <label for="showVideo">Включить Видео</label>
-                <input id="showVideo" v-model="showVideo" type="checkbox" />
-            </div>
-            <div>
-                <label for="showAudio">Включить Звук</label>
-                <input id="showAudio" v-model="showAudio" type="checkbox" />
-            </div>
-            <div>
-                <label for="userName">Желаемое имя</label>
-                <input id="userName" v-model="userName" type="text" />
-            </div>
-            <input type="button" value="Войти" @click="enterRoom" />
-        </div>
+        <v-form v-if="!showRoom">
+            <v-container>
+                <v-row>
+                    <v-col cols="12" md="4">
+                        <v-checkbox id="showVideo" v-model="showVideo" label="Включить видео" />
+                    </v-col>
+                </v-row>
+                <v-row>
+                    <v-col cols="12" md="4">
+                        <v-checkbox id="showAudio" v-model="showAudio" label="Включить звук" />
+                    </v-col>
+                </v-row>
+                <v-row>
+                    <v-col cols="12" md="4" align-self="center">
+                        <v-text-field v-model="userName" label="Желаемое имя" required></v-text-field>
+                    </v-col>
+                </v-row>
+
+                <v-row>
+                    <v-col cols="12" md="4" align-self="center">
+                        <v-btn elevation="6" @click="enterRoom">Войти</v-btn>
+                    </v-col>
+                </v-row>
+            </v-container>
+        </v-form>
         <room
             :show-room="showRoom"
             :show-audio="showAudio"
