@@ -1,6 +1,6 @@
 <template>
     <div v-if="showRoom" class="home">
-        <room-video v-for="(user, index) in streams" :key="index" :user="user"></room-video>
+        <room-video v-for="(user, index) in streams" :key="index" :user="user" :is-self="user.uuid === id"></room-video>
     </div>
 </template>
 
@@ -13,7 +13,7 @@ import { ADD_USER_ACTION, ADD_STREAM_ACTION, REMOVE_USER_ACTION } from "@/store/
 import RoomVideo from "@/components/video.vue";
 import { RoomStream } from "@/store/state";
 import { GET_STREAMS, HAS_USER } from "@/store/getters";
-
+import PC_CONFIG from "@/utils/constants";
 const roomNs = namespace("room");
 
 @Component({
@@ -31,32 +31,12 @@ export default class Room extends Vue {
     @roomNs.Action(ADD_USER_ACTION) addUser: any;
     @roomNs.Action(ADD_STREAM_ACTION) addStream: any;
     @roomNs.Action(REMOVE_USER_ACTION) removeUser: any;
-    @roomNs.State((state) => state.Users) streams: any;
     @roomNs.Getter(HAS_USER) hasUser: any;
-    @roomNs.Getter(GET_STREAMS) getStreams: any;
+    @roomNs.Getter(GET_STREAMS) streams: any;
 
     private id: string;
     private localStream: MediaStream;
     private pearConnections: { [key: string]: RTCPeerConnection } = {};
-    private TURN_SERVER_URL = process.env.VUE_APP_TURN_SERVER_URL;
-    private TURN_SERVER_USERNAME = process.env.VUE_APP_TURN_SERVER_USERNAME;
-    private TURN_SERVER_CREDENTIAL = process.env.VUE_APP_TURN_SERVER_CREDENTIAL;
-    // WebRTC config: you don't have to change this for the example to work
-    // If you are testing on localhost, you can just use PC_CONFIG = {}
-    private PC_CONFIG = {
-        iceServers: [
-            {
-                urls: `turn:${this.TURN_SERVER_URL}?transport=tcp`,
-                username: this.TURN_SERVER_USERNAME,
-                credential: this.TURN_SERVER_CREDENTIAL,
-            },
-            {
-                urls: `turn:${this.TURN_SERVER_URL}?transport=udp`,
-                username: this.TURN_SERVER_USERNAME,
-                credential: this.TURN_SERVER_CREDENTIAL,
-            },
-        ],
-    };
 
     @Socket("ready")
     async onReady() {
@@ -105,6 +85,8 @@ export default class Room extends Vue {
                 audio: this.showAudio,
                 video: this.showVideo,
             });
+            await this.addUser({ uuid: this.id, userName: this.userName, events: [] });
+            await this.addStream({ uuid: this.id, event: this.localStream });
             await this.$socket.client.connect();
             // eslint-disable-next-line no-console
             console.debug("Stream found");
@@ -140,7 +122,7 @@ export default class Room extends Vue {
 
     private registerPeerConnection(uuid: string) {
         try {
-            const pearConnection: RTCPeerConnection = new RTCPeerConnection(this.PC_CONFIG);
+            const pearConnection: RTCPeerConnection = new RTCPeerConnection(PC_CONFIG);
             pearConnection.onicecandidate = (evt) => this.onIceCandidate(evt, uuid);
             this.localStream.getTracks().forEach((track) => pearConnection.addTrack(track, this.localStream));
             pearConnection.ontrack = (evt) => this.onAddStream(evt, uuid);
