@@ -7,6 +7,8 @@
                 </v-card>
             </v-col>
         </v-row>
+        <v-btn @click="switchDevice('video')">Cam</v-btn>
+        <v-btn @click="switchDevice('audio')">Mic</v-btn>
     </v-container>
 </template>
 
@@ -231,6 +233,13 @@ export default class Room extends Vue {
         if (peerCon === "failed" || peerCon === "closed" || peerCon === "disconnected") {
             delete this.pearConnections[uuid];
             await this.removeUser(uuid);
+        }
+    }
+
+    private switchDevice(type: string) {
+        const track = this.localStream.getTracks().find((track: any) => track.kind === type);
+        if (track !== undefined) {
+            track.enabled = !track.enabled;
         }
     }
 }
